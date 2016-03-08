@@ -7,8 +7,9 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
-	"github.com/reds/smtpd"
 	"io/ioutil"
+
+	"github.com/reds/smtpd"
 
 	_ "github.com/lib/pq"
 )
@@ -29,7 +30,7 @@ func (db *storage) Save(to string, from []string, data *bytes.Buffer) error {
 }
 
 func main() {
-	// not config file yet, all command line args
+	// no config file yet, all command line args
 	hp := flag.String("hp", ":25", "Server listening Host and Port")
 	tlsCert := flag.String("cert", "", "PEM file containing server certificate")
 	tlsPriv := flag.String("priv", "", "PEM file containing server private key")
@@ -39,13 +40,15 @@ func main() {
 	dbPort := flag.String("dbp", "5432", "DB port")
 	dbTable := flag.String("dbt", "email", "DB table")
 	flag.Parse()
+	myDomains := flag.Args() // any args are considered domain names
+
 	db, err := dbConnect(*dbUser, *dbPw, *dbHost, *dbPort, *dbTable)
 	if err != nil {
 		fmt.Println(err)
 	}
 
 	err = smtpd.ListenAndServer(
-		&smtpd.ServerConfig{HostPort: *hp},
+		&smtpd.ServerConfig{HostPort: *hp, MyDomains: myDomains},
 		&storage{db: db},
 		*tlsCert,
 		*tlsPriv)

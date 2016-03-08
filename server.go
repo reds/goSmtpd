@@ -59,9 +59,10 @@ const (
 )
 
 type ServerConfig struct {
-	HostPort string
-	Greeting string
-	Hostname string
+	HostPort  string
+	Greeting  string
+	Hostname  string
+	MyDomains []string // domains I will accept email for
 }
 
 // hostname, greeting
@@ -95,7 +96,7 @@ func registerHandlers(cfg *ServerConfig, db Storage, serverCerts []tls.Certifica
 		// 250
 		// 552, 451, 452, 550, 553, 503, 455, 555
 		ctx.from = extractMailbox(arg)
-		if !fromOk(ctx.from) {
+		if !cfg.fromOk(ctx.from) {
 			return ctx.send(fmt.Sprint("550 bad reverse-path: ", arg))
 		}
 		switch ctx.state {
@@ -113,7 +114,7 @@ func registerHandlers(cfg *ServerConfig, db Storage, serverCerts []tls.Certifica
 		// 250: address is ok,  251: address ok, but has changed and I will take care of it
 		// 550, 551, 552, 553, 450, 451, 452, 503, 455, 555
 		to := extractMailbox(arg)
-		if !toOk(to) {
+		if !cfg.toOk(to) {
 			return ctx.send(fmt.Sprint("550 bad recipient <", to, ">", arg))
 		}
 		ctx.to = append(ctx.to, to)
@@ -277,15 +278,15 @@ func parseLine(l string) (opHandler, string, error) {
 	return nil, "", fmt.Errorf("not implemented: %s", l)
 }
 
-func fromOk(from string) bool {
+func (cfg *ServerConfig) fromOk(from string) bool {
 	if from == "" {
 		return false
 	}
 	return true
 }
 
-func toOk(to string) bool {
-	for _, v := range []string{"redmond5.com", "chat52.com", "1366saxon.com"} {
+func (cfg *ServerConfig) toOk(to string) bool {
+	for _, v := range cfg.MyDomains {
 		if strings.HasSuffix(strings.ToLower(to), strings.ToLower(v)) {
 			return true
 		}
