@@ -12,6 +12,17 @@ import (
 	"strings"
 )
 
+type ServerConfig struct {
+	HostPort     string
+	Greeting     string
+	Hostname     string
+	MyDomains    []string // domains I will accept email for
+	TLSCertFile  string
+	TLSKeyFile   string
+	Certificates []tls.Certificate // the loaded certificates
+	doTLS        bool
+}
+
 type Storage interface {
 	Save(from string, to []string, data *bytes.Buffer) error
 }
@@ -58,33 +69,28 @@ const (
 	sstateBadSequence
 )
 
-type ServerConfig struct {
-	HostPort  string
-	Greeting  string
-	Hostname  string
-	MyDomains []string // domains I will accept email for
-}
-
 // hostname, greeting
 // extensions: starttls, maxsize
 
-func registerHandlers(cfg *ServerConfig, db Storage, serverCerts []tls.Certificate) {
+func registerHandlers(cfg *ServerConfig, db Storage) {
 	handle("helo", func(ctx *context, arg string) error {
 		// 250, 504
 		ctx.reset()
-		return ctx.send("250 redmond5.com")
+		return ctx.send("250 " + cfg.Hostname)
 	})
 	handle("ehlo", func(ctx *context, arg string) error {
 		// 250, 504
 		ctx.reset()
-		err := ctx.send("250-redmond5.com")
+		err := ctx.send("250-" + cfg.Hostname)
 		if err != nil {
 			return err
 		}
-		if !ctx.tls {
-			err = ctx.send("250-STARTTLS")
-			if err != nil {
-				return err
+		if cfg.doTLS { // do tls for this server
+			if !ctx.tls { // already in tls stream
+				err = ctx.send("250-STARTTLS")
+				if err != nil {
+					return err
+				}
 			}
 		}
 		// SIZE
@@ -208,7 +214,7 @@ func registerHandlers(cfg *ServerConfig, db Storage, serverCerts []tls.Certifica
 		if err != nil {
 			return err
 		}
-		sc := tls.Server(ctx.c, &tls.Config{Certificates: serverCerts})
+		sc := tls.Server(ctx.c, &tls.Config{Certificates: cfg.Certificates})
 		ctx.reset()
 		ctx.c = sc
 		ctx.scanner = bufio.NewScanner(sc)
@@ -247,14 +253,16 @@ func serve(c net.Conn) {
 	}
 }
 
-func ListenAndServer(scfg *ServerConfig, db Storage, certFile, keyFile string) error {
-	var serverCerts = make([]tls.Certificate, 1)
+func ListenAndServer(scfg *ServerConfig, db Storage) error {
+	scfg.Certificates = make([]tls.Certificate, 1)
+	scfg.doTLS = true
 	var err error
-	serverCerts[0], err = tls.LoadX509KeyPair(certFile, keyFile)
+	scfg.Certificates[0], err = tls.LoadX509KeyPair(scfg.TLSCertFile, scfg.TLSKeyFile)
 	if err != nil {
-		return err
+		log.Println("no TLS", err)
+		scfg.doTLS = false
 	}
-	registerHandlers(scfg, db, serverCerts)
+	registerHandlers(scfg, db)
 	l, err := net.Listen("tcp", scfg.HostPort)
 	if err != nil {
 		return err
