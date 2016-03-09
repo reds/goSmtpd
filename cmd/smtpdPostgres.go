@@ -48,10 +48,13 @@ func main() {
 	}
 
 	err = smtpd.ListenAndServer(
-		&smtpd.ServerConfig{HostPort: *hp, MyDomains: myDomains},
-		&storage{db: db},
-		*tlsCert,
-		*tlsPriv)
+		&smtpd.ServerConfig{
+			HostPort:    *hp,
+			MyDomains:   myDomains,
+			TLSCertFile: *tlsCert,
+			TLSKeyFile:  *tlsPriv,
+		},
+		&storage{db: db})
 	if err != nil {
 		fmt.Println(err)
 	}
